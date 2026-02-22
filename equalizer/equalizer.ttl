@@ -1,0 +1,67 @@
+@prefix doap: <http://usefulinc.com/ns/doap#> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix lv2:  <http://lv2plug.in/ns/lv2core#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix units: <http://lv2plug.in/ns/extensions/units#> .
+
+<https://xdiloc.github.io/dspx/equalizer>
+	a lv2:Plugin , lv2:EqPlugin ;
+	doap:name "dspx equalizer" ;
+	doap:maintainer [
+		foaf:name "xdiloc" ;
+	] ;
+	lv2:port [
+		a lv2:InputPort , lv2:ControlPort ; lv2:index 0 ; lv2:symbol "b60" ; lv2:name "60 Hz" ;
+		lv2:default 0.0 ; lv2:minimum -12.0 ; lv2:maximum 12.0 ; units:unit units:db ;
+	] , [
+		a lv2:InputPort , lv2:ControlPort ; lv2:index 1 ; lv2:symbol "b170" ; lv2:name "170 Hz" ;
+		lv2:default 0.0 ; lv2:minimum -12.0 ; lv2:maximum 12.0 ; units:unit units:db ;
+	] , [
+		a lv2:InputPort , lv2:ControlPort ; lv2:index 2 ; lv2:symbol "b310" ; lv2:name "310 Hz" ;
+		lv2:default 0.0 ; lv2:minimum -12.0 ; lv2:maximum 12.0 ; units:unit units:db ;
+	] , [
+		a lv2:InputPort , lv2:ControlPort ; lv2:index 3 ; lv2:symbol "b600" ; lv2:name "600 Hz" ;
+		lv2:default 0.0 ; lv2:minimum -12.0 ; lv2:maximum 12.0 ; units:unit units:db ;
+	] , [
+		a lv2:InputPort , lv2:ControlPort ; lv2:index 4 ; lv2:symbol "b1k" ; lv2:name "1 kHz" ;
+		lv2:default 0.0 ; lv2:minimum -12.0 ; lv2:maximum 12.0 ; units:unit units:db ;
+	] , [
+		a lv2:InputPort , lv2:ControlPort ; lv2:index 5 ; lv2:symbol "b3k" ; lv2:name "3 kHz" ;
+		lv2:default 0.0 ; lv2:minimum -12.0 ; lv2:maximum 12.0 ; units:unit units:db ;
+	] , [
+		a lv2:InputPort , lv2:ControlPort ; lv2:index 6 ; lv2:symbol "b6k" ; lv2:name "6 kHz" ;
+		lv2:default 0.0 ; lv2:minimum -12.0 ; lv2:maximum 12.0 ; units:unit units:db ;
+	] , [
+		a lv2:InputPort , lv2:ControlPort ; lv2:index 7 ; lv2:symbol "b12k" ; lv2:name "12 kHz" ;
+		lv2:default 0.0 ; lv2:minimum -12.0 ; lv2:maximum 12.0 ; units:unit units:db ;
+	] , [
+		a lv2:InputPort , lv2:ControlPort ; lv2:index 8 ; lv2:symbol "b14k" ; lv2:name "14 kHz" ;
+		lv2:default 0.0 ; lv2:minimum -12.0 ; lv2:maximum 12.0 ; units:unit units:db ;
+	] , [
+		a lv2:InputPort , lv2:ControlPort ; lv2:index 9 ; lv2:symbol "b16k" ; lv2:name "16 kHz" ;
+		lv2:default 0.0 ; lv2:minimum -12.0 ; lv2:maximum 12.0 ; units:unit units:db ;
+	] , [
+		a lv2:InputPort , lv2:ControlPort ; lv2:index 10 ; lv2:symbol "preamp" ; lv2:name "Preamp" ;
+		lv2:default 0.0 ; lv2:minimum -20.0 ; lv2:maximum 20.0 ; units:unit units:db ;
+	] , [
+		a lv2:InputPort , lv2:ControlPort ;
+		lv2:index 11 ;
+		lv2:symbol "mode" ;
+		lv2:name "Filter Form" ;
+		lv2:default 0 ;
+		lv2:minimum 0 ;
+		lv2:maximum 2 ;
+		lv2:portProperty lv2:integer , lv2:enumeration ;
+		lv2:scalePoint [ rdfs:label "Direct Form II" ; rdf:value 0 ] ;
+		lv2:scalePoint [ rdfs:label "Transposed Direct Form II" ; rdf:value 1 ] ;
+		lv2:scalePoint [ rdfs:label "State Variable Filter" ; rdf:value 2 ] ;
+	] , [
+		a lv2:InputPort , lv2:AudioPort ; lv2:index 12 ; lv2:symbol "in_l" ; lv2:name "In Left"
+	] , [
+		a lv2:InputPort , lv2:AudioPort ; lv2:index 13 ; lv2:symbol "in_r" ; lv2:name "In Right"
+	] , [
+		a lv2:OutputPort , lv2:AudioPort ; lv2:index 14 ; lv2:symbol "out_l" ; lv2:name "Out Left"
+	] , [
+		a lv2:OutputPort , lv2:AudioPort ; lv2:index 15 ; lv2:symbol "out_r" ; lv2:name "Out Right"
+	] .

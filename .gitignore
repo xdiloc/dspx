@@ -1,0 +1,13 @@
+# Бинарные артефакты
+*.so
+*.o
+*.a
+*.la
+*.lo
+
+# Скрипты бэкапа и мусор
+dspx_backup
+bk.sh
+*.zip
+help
+limiter
