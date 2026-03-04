@@ -116,20 +116,36 @@ void process_svf(BandFilter* f, float* l, float* r) {
 
 /**
  * @brief Обработка одной полосы методом Transposed Direct Form II
+ * Модификация: Bypass при нулевом входе для предотвращения самовозбуждения.
  * f - структура фильтра
  * l - указатель на левый канал
  * r - указатель на правый канал
  */
 void process_tdf2(BandFilter* f, float* l, float* r) {
-	float outL = f->b0 * (*l) + f->v1L;
-	f->v1L = CLEAN(f->b1 * (*l) - f->a1 * outL + f->v2L);
-	f->v2L = CLEAN(f->b2 * (*l) - f->a2 * outL);
-	*l = outL;
+	/* Левый канал */
+	if (*l == 0.0f) {
+		/* Если на входе 0, принудительно гасим внутреннюю энергию */
+		f->v1L = 0.0f;
+		f->v2L = 0.0f;
+	} else {
+		float inL = *l;
+		float outL = f->b0 * inL + f->v1L;
+		f->v1L = CLEAN(f->b1 * inL - f->a1 * outL + f->v2L);
+		f->v2L = CLEAN(f->b2 * inL - f->a2 * outL);
+		*l = outL;
+	}
 
-	float outR = f->b0 * (*r) + f->v1R;
-	f->v1R = CLEAN(f->b1 * (*r) - f->a1 * outR + f->v2R);
-	f->v2R = CLEAN(f->b2 * (*r) - f->a2 * outR);
-	*r = outR;
+	/* Правый канал */
+	if (*r == 0.0f) {
+		f->v1R = 0.0f;
+		f->v2R = 0.0f;
+	} else {
+		float inR = *r;
+		float outR = f->b0 * inR + f->v1R;
+		f->v1R = CLEAN(f->b1 * inR - f->a1 * outR + f->v2R);
+		f->v2R = CLEAN(f->b2 * inR - f->a2 * outR);
+		*r = outR;
+	}
 }
 
 /**
