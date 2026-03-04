@@ -89,7 +89,6 @@ void compute_coeffs_svf(BandFilter* f, float gain_db, float sr) {
 	f->svf_m_gain = powf(10.0f, gain_db * 0.05f) - 1.0f;
 }
 
-
 /**
  * @brief Обработка одной полосы методом State Variable Filter
  * f - указатель на структуру фильтра
@@ -106,13 +105,13 @@ void process_svf(BandFilter* f, float* l, float* r) {
 	float v1L = a1 * f->v1L + a2 * v3L;
 	float v2L = f->v2L + a2 * f->v1L + a3 * v3L;
 	*l += mg * v1L;
-	f->v1L = 2.0f * v1L - f->v1L; f->v2L = 2.0f * v2L - f->v2L;
+	f->v1L = CLEAN(2.0f * v1L - f->v1L); f->v2L = CLEAN(2.0f * v2L - f->v2L);
 
 	float v3R = *r - f->v2R;
 	float v1R = a1 * f->v1R + a2 * v3R;
 	float v2R = f->v2R + a2 * f->v1R + a3 * v3R;
 	*r += mg * v1R;
-	f->v1R = 2.0f * v1R - f->v1R; f->v2R = 2.0f * v2R - f->v2R;
+	f->v1R = CLEAN(2.0f * v1R - f->v1R); f->v2R = CLEAN(2.0f * v2R - f->v2R);
 }
 
 /**
@@ -123,13 +122,13 @@ void process_svf(BandFilter* f, float* l, float* r) {
  */
 void process_tdf2(BandFilter* f, float* l, float* r) {
 	float outL = f->b0 * (*l) + f->v1L;
-	f->v1L = f->b1 * (*l) - f->a1 * outL + f->v2L;
-	f->v2L = f->b2 * (*l) - f->a2 * outL;
+	f->v1L = CLEAN(f->b1 * (*l) - f->a1 * outL + f->v2L);
+	f->v2L = CLEAN(f->b2 * (*l) - f->a2 * outL);
 	*l = outL;
 
 	float outR = f->b0 * (*r) + f->v1R;
-	f->v1R = f->b1 * (*r) - f->a1 * outR + f->v2R;
-	f->v2R = f->b2 * (*r) - f->a2 * outR;
+	f->v1R = CLEAN(f->b1 * (*r) - f->a1 * outR + f->v2R);
+	f->v2R = CLEAN(f->b2 * (*r) - f->a2 * outR);
 	*r = outR;
 }
 
@@ -142,12 +141,12 @@ void process_tdf2(BandFilter* f, float* l, float* r) {
 void process_df2(BandFilter* f, float* l, float* r) {
 	float wL = *l - f->a1 * f->v1L - f->a2 * f->v2L;
 	float outL = f->b0 * wL + f->b1 * f->v1L + f->b2 * f->v2L;
-	f->v2L = f->v1L; f->v1L = wL;
+	f->v2L = f->v1L; f->v1L = CLEAN(wL);
 	*l = outL;
 
 	float wR = *r - f->a1 * f->v1R - f->a2 * f->v2R;
 	float outR = f->b0 * wR + f->b1 * f->v1R + f->b2 * f->v2R;
-	f->v2R = f->v1R; f->v1R = wR;
+	f->v2R = f->v1R; f->v1R = CLEAN(wR);
 	*r = outR;
 }
 
