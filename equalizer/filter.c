@@ -90,79 +90,175 @@ void compute_coeffs_svf(BandFilter* f, float gain_db, float sr) {
 }
 
 /**
- * @brief Обработка одной полосы методом State Variable Filter
- * f - указатель на структуру фильтра
- * l - левый канал
- * r - правый канал
- */
-void process_svf(BandFilter* f, float* l, float* r) {
-	float a1 = f->svf_a1;
-	float a2 = f->svf_a2;
-	float a3 = f->svf_a3;
-	float mg = f->svf_m_gain;
-
-	float v3L = *l - f->v2L;
-	float v1L = a1 * f->v1L + a2 * v3L;
-	float v2L = f->v2L + a2 * f->v1L + a3 * v3L;
-	*l += mg * v1L;
-	f->v1L = CLEAN(2.0f * v1L - f->v1L); f->v2L = CLEAN(2.0f * v2L - f->v2L);
-
-	float v3R = *r - f->v2R;
-	float v1R = a1 * f->v1R + a2 * v3R;
-	float v2R = f->v2R + a2 * f->v1R + a3 * v3R;
-	*r += mg * v1R;
-	f->v1R = CLEAN(2.0f * v1R - f->v1R); f->v2R = CLEAN(2.0f * v2R - f->v2R);
-}
-
-/**
- * @brief Обработка одной полосы методом Transposed Direct Form II
- * Модификация: Bypass при нулевом входе для предотвращения самовозбуждения.
- * f - структура фильтра
- * l - указатель на левый канал
- * r - указатель на правый канал
- */
-void process_tdf2(BandFilter* f, float* l, float* r) {
-	/* Левый канал */
-	if (*l == 0.0f) {
-		/* Если на входе 0, принудительно гасим внутреннюю энергию */
-		f->v1L = 0.0f;
-		f->v2L = 0.0f;
-	} else {
-		float inL = *l;
-		float outL = f->b0 * inL + f->v1L;
-		f->v1L = CLEAN(f->b1 * inL - f->a1 * outL + f->v2L);
-		f->v2L = CLEAN(f->b2 * inL - f->a2 * outL);
-		*l = outL;
-	}
-
-	/* Правый канал */
-	if (*r == 0.0f) {
-		f->v1R = 0.0f;
-		f->v2R = 0.0f;
-	} else {
-		float inR = *r;
-		float outR = f->b0 * inR + f->v1R;
-		f->v1R = CLEAN(f->b1 * inR - f->a1 * outR + f->v2R);
-		f->v2R = CLEAN(f->b2 * inR - f->a2 * outR);
-		*r = outR;
-	}
-}
-
-/**
  * @brief Обработка одной полосы методом Direct Form II
+ * Самогаситель для DF2: энергия утекает из линии задержки при 0 на входе.
  * f - структура фильтра
  * l - указатель на левый канал
  * r - указатель на правый канал
  */
 void process_df2(BandFilter* f, float* l, float* r) {
-	float wL = *l - f->a1 * f->v1L - f->a2 * f->v2L;
-	float outL = f->b0 * wL + f->b1 * f->v1L + f->b2 * f->v2L;
-	f->v2L = f->v1L; f->v1L = CLEAN(wL);
+	const float inL = *l;
+	const float inR = *r;
+	const float leakage = 0.999f;
+	float outL, outR;
+
+	/* --- Левый канал --- */
+	if (inL == 0.0f) {
+		/* Расчет внутреннего узла без входного сигнала */
+		float wL = -f->a1 * f->v1L - f->a2 * f->v2L;
+		/* Выход на основе текущих (еще не обновленных) состояний */
+		outL = f->b0 * wL + f->b1 * f->v1L + f->b2 * f->v2L;
+
+		/* Обновление линии задержки с применением самогасителя */
+		f->v2L = f->v1L * leakage;
+		f->v1L = wL * leakage;
+
+		/* Порог отсечки для предотвращения денормалов */
+		if (fabsf(f->v1L) < 1e-12f && fabsf(f->v2L) < 1e-12f) {
+			f->v1L = 0.0f; f->v2L = 0.0f; outL = 0.0f;
+		}
+	} else {
+		float wL = inL - f->a1 * f->v1L - f->a2 * f->v2L;
+		outL = f->b0 * wL + f->b1 * f->v1L + f->b2 * f->v2L;
+		f->v2L = f->v1L;
+		f->v1L = wL;
+	}
 	*l = outL;
 
-	float wR = *r - f->a1 * f->v1R - f->a2 * f->v2R;
-	float outR = f->b0 * wR + f->b1 * f->v1R + f->b2 * f->v2R;
-	f->v2R = f->v1R; f->v1R = CLEAN(wR);
+	/* --- Правый канал --- */
+	if (inR == 0.0f) {
+		float wR = -f->a1 * f->v1R - f->a2 * f->v2R;
+		outR = f->b0 * wR + f->b1 * f->v1R + f->b2 * f->v2R;
+
+		f->v2R = f->v1R * leakage;
+		f->v1R = wR * leakage;
+
+		if (fabsf(f->v1R) < 1e-12f && fabsf(f->v2R) < 1e-12f) {
+			f->v1R = 0.0f; f->v2R = 0.0f; outR = 0.0f;
+		}
+	} else {
+		float wR = inR - f->a1 * f->v1R - f->a2 * f->v2R;
+		outR = f->b0 * wR + f->b1 * f->v1R + f->b2 * f->v2R;
+		f->v2R = f->v1R;
+		f->v1R = wR;
+	}
 	*r = outR;
+}
+
+/**
+ * @brief Обработка одной полосы методом Transposed Direct Form II
+ * Реализован самогаситель: при 0 на входе фильтр плавно теряет энергию.
+ * f - структура фильтра
+ * l - указатель на левый канал
+ * r - указатель на правый канал
+ */
+void process_tdf2(BandFilter* f, float* l, float* r) {
+	const float inL = *l;
+	const float inR = *r;
+	float outL, outR;
+
+	/* Коэффициент утечки: 0.999f - очень медленно, 0.99f - оптимально */
+	const float leakage = 0.99f;
+
+	/* --- Левый канал --- */
+	if (inL == 0.0f) {
+		outL = f->v1L;
+		/* Вычисляем следующее состояние без входа и гасим его */
+		f->v1L = (f->v2L - f->a1 * outL) * leakage;
+		f->v2L = (-f->a2 * outL) * leakage;
+
+		/* Точка абсолютного покоя */
+		if (fabsf(f->v1L) < 1e-12f) { f->v1L = 0.0f; f->v2L = 0.0f; outL = 0.0f; }
+	} else {
+		outL = f->b0 * inL + f->v1L;
+		f->v1L = f->b1 * inL - f->a1 * outL + f->v2L;
+		f->v2L = f->b2 * inL - f->a2 * outL;
+	}
+	*l = outL;
+
+	/* --- Правый канал --- */
+	if (inR == 0.0f) {
+		outR = f->v1R;
+		f->v1R = (f->v2R - f->a1 * outR) * leakage;
+		f->v2R = (-f->a2 * outR) * leakage;
+
+		if (fabsf(f->v1R) < 1e-12f) { f->v1R = 0.0f; f->v2R = 0.0f; outR = 0.0f; }
+	} else {
+		outR = f->b0 * inR + f->v1R;
+		f->v1R = f->b1 * inR - f->a1 * outR + f->v2R;
+		f->v2R = f->b2 * inR - f->a2 * outR;
+	}
+	*r = outR;
+}
+
+/**
+ * @brief Обработка одной полосы методом State Variable Filter
+ * Самогаситель для SVF: плавно гасит энергию интеграторов при 0 на входе.
+ * f - указатель на структуру фильтра
+ * l - левый канал
+ * r - правый канал
+ */
+void process_svf(BandFilter* f, float* l, float* r) {
+	const float inL = *l;
+	const float inR = *r;
+	const float a1 = f->svf_a1;
+	const float a2 = f->svf_a2;
+	const float a3 = f->svf_a3;
+	const float mg = f->svf_m_gain;
+	const float leakage = 0.999f;
+
+	/* --- Левый канал --- */
+	if (inL == 0.0f) {
+		/* При in=0 узел v3 зависит только от накопленного напряжения на v2 */
+		float v3L = -f->v2L;
+		float v1L = a1 * f->v1L + a2 * v3L;
+		float v2L = f->v2L + a2 * f->v1L + a3 * v3L;
+
+		/* Выдаем остаточное усиление */
+		*l = mg * v1L;
+
+		/* Гасим интеграторы. Коэффициент 2.0 обусловлен структурой трапеции */
+		f->v1L = (2.0f * v1L - f->v1L) * leakage;
+		f->v2L = (2.0f * v2L - f->v2L) * leakage;
+
+		/* Порог полной тишины */
+		if (fabsf(f->v1L) < 1e-12f && fabsf(f->v2L) < 1e-12f) {
+			f->v1L = 0.0f; f->v2L = 0.0f; *l = 0.0f;
+		}
+	} else {
+		float v3L = inL - f->v2L;
+		float v1L = a1 * f->v1L + a2 * v3L;
+		float v2L = f->v2L + a2 * f->v1L + a3 * v3L;
+
+		*l += mg * v1L;
+
+		f->v1L = 2.0f * v1L - f->v1L;
+		f->v2L = 2.0f * v2L - f->v2L;
+	}
+
+	/* --- Правый канал --- */
+	if (inR == 0.0f) {
+		float v3R = -f->v2R;
+		float v1R = a1 * f->v1R + a2 * v3R;
+		float v2R = f->v2R + a2 * f->v1R + a3 * v3R;
+
+		*r = mg * v1R;
+
+		f->v1R = (2.0f * v1R - f->v1R) * leakage;
+		f->v2R = (2.0f * v2R - f->v2R) * leakage;
+
+		if (fabsf(f->v1R) < 1e-12f && fabsf(f->v2R) < 1e-12f) {
+			f->v1R = 0.0f; f->v2R = 0.0f; *r = 0.0f;
+		}
+	} else {
+		float v3R = inR - f->v2R;
+		float v1R = a1 * f->v1R + a2 * v3R;
+		float v2R = f->v2R + a2 * f->v1R + a3 * v3R;
+
+		*r += mg * v1R;
+
+		f->v1R = 2.0f * v1R - f->v1R;
+		f->v2R = 2.0f * v2R - f->v2R;
+	}
 }
 

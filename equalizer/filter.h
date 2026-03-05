@@ -7,11 +7,6 @@
 #define PI 3.14159265358979323846f
 #endif
 
-/**
- * @brief Макрос для защиты от денормализации (Anti-Denormal)
- */
-#define CLEAN(v) (fabsf(v) < 1e-15f ? 0.0f : v)
-
 typedef enum {
 	FORM_DF2 = 0,
 	FORM_TDF2 = 1,
