@@ -99,7 +99,7 @@ void compute_coeffs_svf(BandFilter* f, float gain_db, float sr) {
 void process_df2(BandFilter* f, float* l, float* r) {
 	const float inL = *l;
 	const float inR = *r;
-	const float leakage = 0.999f;
+	const float leakage = 0.99f;
 	float outL, outR;
 
 	/* --- Левый канал --- */
@@ -205,7 +205,7 @@ void process_svf(BandFilter* f, float* l, float* r) {
 	const float a2 = f->svf_a2;
 	const float a3 = f->svf_a3;
 	const float mg = f->svf_m_gain;
-	const float leakage = 0.999f;
+	const float leakage = 0.99f;
 
 	/* --- Левый канал --- */
 	if (inL == 0.0f) {
