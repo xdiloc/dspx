@@ -90,51 +90,70 @@ void compute_coeffs_svf(BandFilter* f, float gain_db, float sr) {
 }
 
 /**
+ * @brief Обработка одного канала фильтром Direct Form II
+ * f - указатель на структуру фильтра
+ * in - входной сигнал
+ * v1 - указатель на состояние 1
+ * v2 - указатель на состояние 2
+ */
+static float process_channel_df2(BandFilter* f, float in, float* v1, float* v2) {
+	const float leakage = 0.99f;
+	float w = in - f->a1 * (*v1) - f->a2 * (*v2);
+	float out = f->b0 * w + f->b1 * (*v1) + f->b2 * (*v2);
+
+	if (in == 0.0f) {
+		/* Гасим энергию в узлах */
+		*v2 = (*v1) * leakage;
+		*v1 = w * leakage;
+		/* Проверка на денормалы */
+		if (fabsf(*v1) < 1e-12f) { 
+			*v1 = 0.0f; *v2 = 0.0f; out = 0.0f; 
+		}
+	} else {
+		*v2 = *v1;
+		*v1 = w;
+	}
+	return out;
+}
+
+/**
  * @brief Обработка одной полосы методом Direct Form II
  * f - структура фильтра
  * l - указатель на левый канал
  * r - указатель на правый канал
  */
 void process_df2(BandFilter* f, float* l, float* r) {
-	const float inL = *l;
-	const float inR = *r;
+	*l = process_channel_df2(f, *l, &f->v1L, &f->v2L);
+	*r = process_channel_df2(f, *r, &f->v1R, &f->v2R);
+}
+
+/**
+ * @brief Обработка одного канала фильтром Transposed Direct Form II
+ * f - указатель на структуру фильтра
+ * in - входной сигнал
+ * v1 - указатель на состояние 1
+ * v2 - указатель на состояние 2
+ */
+static float process_channel_tdf2(BandFilter* f, float in, float* v1, float* v2) {
 	const float leakage = 0.99f;
-	float outL, outR;
+	float out = f->b0 * in + (*v1);
+	float next_v1 = f->b1 * in - f->a1 * out + (*v2);
+	float next_v2 = f->b2 * in - f->a2 * out;
 
-	/* --- Левый канал --- */
-	/* Общая математика DF2 */
-	float wL = inL - f->a1 * f->v1L - f->a2 * f->v2L;
-	outL = f->b0 * wL + f->b1 * f->v1L + f->b2 * f->v2L;
+	if (in == 0.0f) {
+		/* Применяем гаситель к результату шага */
+		*v1 = next_v1 * leakage;
+		*v2 = next_v2 * leakage;
 
-	if (inL == 0.0f) {
-		/* Гасим энергию в узлах */
-		f->v2L = f->v1L * leakage;
-		f->v1L = wL * leakage;
-		/* Проверка на денормалы */
-		if (fabsf(f->v1L) < 1e-12f) { 
-			f->v1L = 0.0f; f->v2L = 0.0f; outL = 0.0f; 
+		/* Плавное обнуление при достижении порога */
+		if (fabsf(*v1) < 1e-12f) {
+			*v1 = 0.0f; *v2 = 0.0f; out = 0.0f;
 		}
 	} else {
-		f->v2L = f->v1L;
-		f->v1L = wL;
+		*v1 = next_v1;
+		*v2 = next_v2;
 	}
-	*l = outL;
-
-	/* --- Правый канал --- */
-	float wR = inR - f->a1 * f->v1R - f->a2 * f->v2R;
-	outR = f->b0 * wR + f->b1 * f->v1R + f->b2 * f->v2R;
-
-	if (inR == 0.0f) {
-		f->v2R = f->v1R * leakage;
-		f->v1R = wR * leakage;
-		if (fabsf(f->v1R) < 1e-12f) { 
-			f->v1R = 0.0f; f->v2R = 0.0f; outR = 0.0f; 
-		}
-	} else {
-		f->v2R = f->v1R;
-		f->v1R = wR;
-	}
-	*r = outR;
+	return out;
 }
 
 /**
@@ -144,49 +163,43 @@ void process_df2(BandFilter* f, float* l, float* r) {
  * r - указатель на правый канал
  */
 void process_tdf2(BandFilter* f, float* l, float* r) {
-	const float inL = *l;
-	const float inR = *r;
+	*l = process_channel_tdf2(f, *l, &f->v1L, &f->v2L);
+	*r = process_channel_tdf2(f, *r, &f->v1R, &f->v2R);
+}
+
+/**
+ * @brief Обработка одного канала фильтром State Variable Filter
+ * f - указатель на структуру фильтра
+ * in - входной сигнал
+ * v1 - указатель на состояние 1
+ * v2 - указатель на состояние 2
+ */
+static float process_channel_svf(BandFilter* f, float in, float* v1, float* v2) {
+	const float a1 = f->svf_a1;
+	const float a2 = f->svf_a2;
+	const float a3 = f->svf_a3;
+	const float mg = f->svf_m_gain;
 	const float leakage = 0.99f;
-	float outL, outR;
 
-	/* --- Левый канал --- */
-	/* Вычисляем стандартный шаг TDF2 */
-	outL = f->b0 * inL + f->v1L;
-	float next_v1L = f->b1 * inL - f->a1 * outL + f->v2L;
-	float next_v2L = f->b2 * inL - f->a2 * outL;
+	float v3 = in - (*v2);
+	float v1_step = a1 * (*v1) + a2 * v3;
+	float v2_step = (*v2) + a2 * (*v1) + a3 * v3;
 
-	if (inL == 0.0f) {
-		/* Применяем гаситель к результату шага */
-		f->v1L = next_v1L * leakage;
-		f->v2L = next_v2L * leakage;
+	float out = in + mg * v1_step;
 
-		/* Плавное обнуление при достижении порога */
-		if (fabsf(f->v1L) < 1e-12f) {
-			f->v1L = 0.0f; f->v2L = 0.0f; outL = 0.0f;
-		}
+	/* Обновление состояний по методу трапеций */
+	float next_v1 = 2.0f * v1_step - (*v1);
+	float next_v2 = 2.0f * v2_step - (*v2);
+
+	if (in == 0.0f) {
+		*v1 = next_v1 * leakage;
+		*v2 = next_v2 * leakage;
+		if (fabsf(*v1) < 1e-12f) { *v1 = 0.0f; *v2 = 0.0f; out = 0.0f; }
 	} else {
-		f->v1L = next_v1L;
-		f->v2L = next_v2L;
+		*v1 = next_v1;
+		*v2 = next_v2;
 	}
-	*l = outL;
-
-	/* --- Правый канал --- */
-	outR = f->b0 * inR + f->v1R;
-	float next_v1R = f->b1 * inR - f->a1 * outR + f->v2R;
-	float next_v2R = f->b2 * inR - f->a2 * outR;
-
-	if (inR == 0.0f) {
-		f->v1R = next_v1R * leakage;
-		f->v2R = next_v2R * leakage;
-
-		if (fabsf(f->v1R) < 1e-12f) {
-			f->v1R = 0.0f; f->v2R = 0.0f; outR = 0.0f;
-		}
-	} else {
-		f->v1R = next_v1R;
-		f->v2R = next_v2R;
-	}
-	*r = outR;
+	return out;
 }
 
 /**
@@ -196,52 +209,7 @@ void process_tdf2(BandFilter* f, float* l, float* r) {
  * r - правый канал
  */
 void process_svf(BandFilter* f, float* l, float* r) {
-	const float inL = *l;
-	const float inR = *r;
-	const float a1 = f->svf_a1;
-	const float a2 = f->svf_a2;
-	const float a3 = f->svf_a3;
-	const float mg = f->svf_m_gain;
-	const float leakage = 0.99f;
-
-	/* --- Левый канал --- */
-	float v3L = inL - f->v2L;
-	float v1L_step = a1 * f->v1L + a2 * v3L;
-	float v2L_step = f->v2L + a2 * f->v1L + a3 * v3L;
-
-	/* Правильная сумма для Peak EQ: вход + (gain-1) * bandpass */
-	*l = inL + mg * v1L_step;
-
-	/* Обновление состояний по методу трапеций */
-	float next_v1L = 2.0f * v1L_step - f->v1L;
-	float next_v2L = 2.0f * v2L_step - f->v2L;
-
-	if (inL == 0.0f) {
-		f->v1L = next_v1L * leakage;
-		f->v2L = next_v2L * leakage;
-		if (fabsf(f->v1L) < 1e-12f) { f->v1L = 0.0f; f->v2L = 0.0f; *l = 0.0f; }
-	} else {
-		f->v1L = next_v1L;
-		f->v2L = next_v2L;
-	}
-
-	/* --- Правый канал --- */
-	float v3R = inR - f->v2R;
-	float v1R_step = a1 * f->v1R + a2 * v3R;
-	float v2R_step = f->v2R + a2 * f->v1R + a3 * v3R;
-
-	*r = inR + mg * v1R_step;
-
-	float next_v1R = 2.0f * v1R_step - f->v1R;
-	float next_v2R = 2.0f * v2R_step - f->v2R;
-
-	if (inR == 0.0f) {
-		f->v1R = next_v1R * leakage;
-		f->v2R = next_v2R * leakage;
-		if (fabsf(f->v1R) < 1e-12f) { f->v1R = 0.0f; f->v2R = 0.0f; *r = 0.0f; }
-	} else {
-		f->v1R = next_v1R;
-		f->v2R = next_v2R;
-	}
+	*l = process_channel_svf(f, *l, &f->v1L, &f->v2L);
+	*r = process_channel_svf(f, *r, &f->v1R, &f->v2R);
 }
 
