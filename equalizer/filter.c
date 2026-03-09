@@ -1,5 +1,7 @@
 #include "filter.h"
 
+#define DENORMAL_OFFSET 1e-12f
+
 /**
  * @brief Расчет стандартных коэффициентов биквадрата
  * f - указатель на структуру фильтра
@@ -34,7 +36,7 @@ void compute_coeffs_biquad(BandFilter* f, float gain_db, float sr) {
 		/* W3C Shelf alpha: sin(w0)/2 * sqrt( (A + 1/A)*(1/S - 1) + 2 ) */
 		alpha = (sn0 / 2.0) * sqrt((a + 1.0 / a) * (1.0 / shelf_slope - 1.0) + 2.0);
 	}
-	
+
 	sa = 2.0 * sqrt(a) * alpha;
 	ap1 = a + 1.0;
 	am1 = a - 1.0;
@@ -88,7 +90,7 @@ void compute_coeffs_svf(BandFilter* f, float gain_db, float sr) {
 
 	/* Используем double для точности расчета */
 	double g = tan(PI * (double)f->freq / (double)sr);
-	double k = 1.414213562373095; 
+	double k = 1.414213562373095;
 	double a1 = 1.0 / (1.0 + g * (g + k));
 
 	f->svf_a1 = (float)a1;
@@ -113,11 +115,11 @@ static float process_channel_df2(BandFilter* f, float in, float* v1, float* v2) 
 	*v1 = w;
 
 	/* Проверка на денормалы */
-	if (fabsf(*v1) < 1e-12f) { 
+	if (fabsf(*v1) < DENORMAL_OFFSET) {
 		*v1 = 0.0f;
 		*v2 = 0.0f;
 	}
-	
+
 	return out;
 }
 
@@ -149,7 +151,7 @@ static float process_channel_tdf2(BandFilter* f, float in, float* v1, float* v2)
 	*v2 = next_v2;
 
 	/* Проверка на денормалы для предотвращения щелчков */
-	if (fabsf(*v1) < 1e-12f) {
+	if (fabsf(*v1) < DENORMAL_OFFSET) {
 		*v1 = 0.0f;
 		*v2 = 0.0f;
 	}
@@ -190,12 +192,6 @@ static float process_channel_svf(BandFilter* f, float in, float* v1, float* v2) 
 	/* Обновление состояний по методу трапеций */
 	*v1 = 2.0f * v1_step - (*v1);
 	*v2 = 2.0f * v2_step - (*v2);
-
-	/* Защита от денормалов */
-	if (fabsf(*v1) < 1e-12f) { 
-		*v1 = 0.0f; 
-		*v2 = 0.0f; 
-	}
 
 	return out;
 }
