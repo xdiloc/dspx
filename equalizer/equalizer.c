@@ -14,7 +14,7 @@ typedef struct {
 	const float* inputR;
 	float* outputL;
 	float* outputR;
-	
+
 	BandFilter filters[BANDS_COUNT];
 	float last_preamp_db;
 	float preamp_gain;
@@ -44,10 +44,12 @@ static void update_filter_params(dspxEq* m, int mode) {
 	float fs = (float)m->sample_rate;
 
 	for (b = 0; b < BANDS_COUNT; ++b) {
-		if (mode == FORM_SVF) {
-			compute_coeffs_svf(&m->filters[b], *m->ports[b], fs);
-		} else {
-			compute_coeffs_biquad(&m->filters[b], *m->ports[b], fs);
+		if (m->filters[b].last_gain != *m->ports[b]) {
+			if (mode == FORM_SVF) {
+				compute_coeffs_svf(&m->filters[b], *m->ports[b], fs);
+			} else {
+				compute_coeffs_biquad(&m->filters[b], *m->ports[b], fs);
+			}
 		}
 	}
 }
